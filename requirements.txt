@@ -1,0 +1,7 @@
+azure-functions
+streamlit
+requests
+msal
+python-dotenv
+google-generativeai
+azure-data-tables
