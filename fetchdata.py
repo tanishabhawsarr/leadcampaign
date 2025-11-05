@@ -5,7 +5,8 @@ import os
 from dotenv import load_dotenv
 
 load_dotenv()
-connection_string =  os.getenv("AZURE_TABLE_CONNECTION_STRING")
+
+connection_string =  os.getenv("AZURE_CONNECTION_STRING")
 table_name = os.getenv("TABLE_NAME")
 
 service = TableServiceClient.from_connection_string(conn_str=connection_string)
