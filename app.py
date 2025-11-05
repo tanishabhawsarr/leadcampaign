@@ -32,7 +32,7 @@ app = msal.ConfidentialClientApplication(
 st.subheader("Step 1️⃣: Sign in with Microsoft")
 
 # ✅ 1. Check if redirected back with ?code=
-query_params = st.experimental_get_query_params()
+query_params = st.query_params
 auth_code = query_params.get("code", [None])[0]
 
 if not st.session_state.get("access_token"):
