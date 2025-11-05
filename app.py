@@ -13,7 +13,7 @@ import os
 load_dotenv()
 CLIENT_ID = os.getenv("CLIENT_ID")
 TENANT_ID = os.getenv("TENANT_ID")
-
+CLIENT_SECRET=os.getenv("CLIENT_SECRET")
 
 AUTHORITY = f"https://login.microsoftonline.com/{TENANT_ID}"
 REDIRECT_URI = "https://leadsemailcampaign-fub8e3fpc7akhyaf.centralindia-01.azurewebsites.net/"
@@ -23,47 +23,49 @@ st.set_page_config(page_title="📧 AppSource Leads Email Campaign", page_icon="
 st.title("📧 Addend Analytics Email Campaign (Microsoft Login)")
 
 print("🔧 Initializing MSAL client...")
-app = msal.PublicClientApplication(CLIENT_ID, authority=AUTHORITY)
+app = msal.ConfidentialClientApplication(
+    CLIENT_ID,
+    authority=AUTHORITY,
+    client_credential=CLIENT_SECRET
+)
 
-if "access_token" not in st.session_state:
-    st.session_state.access_token = None
-if "user_email" not in st.session_state:
-    st.session_state.user_email = None
-if "lead" not in st.session_state:
-    st.session_state.lead = None
-if "mail_body" not in st.session_state:
-    st.session_state.mail_body = None
+st.subheader("Step 1️⃣: Sign in with Microsoft")
 
-# ==============================
-# 🪪 Step 1: Microsoft Login
-# ==============================
-st.subheader("Step 1️⃣: Sign in with your Microsoft account")
+# ✅ 1. Check if redirected back with ?code=
+query_params = st.experimental_get_query_params()
+auth_code = query_params.get("code", [None])[0]
 
-if not st.session_state.access_token:
-    flow = app.initiate_device_flow(scopes=SCOPE)
-    if "user_code" not in flow:
-        st.error("Failed to create device flow. Check Azure AD app settings.")
-    else:
-        st.markdown("**👉 Go to** [https://microsoft.com/devicelogin](https://microsoft.com/devicelogin)")
-        st.code(flow["user_code"], language="bash")
-        st.info("After login, return here. The app will wait for authentication...")
-
-        result = app.acquire_token_by_device_flow(flow)
+if not st.session_state.get("access_token"):
+    if auth_code:
+        # ✅ Exchange code for access token
+        result = app.acquire_token_by_authorization_code(
+            auth_code,
+            scopes=SCOPE,
+            redirect_uri=REDIRECT_URI
+        )
         if "access_token" in result:
             st.session_state.access_token = result["access_token"]
-            st.success("✅ Logged in successfully!")
 
-            graph_resp = requests.get(
+            # Fetch user email
+            me = requests.get(
                 "https://graph.microsoft.com/v1.0/me",
                 headers={"Authorization": f"Bearer {result['access_token']}"}
-            )
-            if graph_resp.status_code == 200:
-                st.session_state.user_email = graph_resp.json().get("mail")
-                print(f"✅ Logged in as {st.session_state.user_email}")
+            ).json()
+            st.session_state.user_email = me.get("mail") or me.get("userPrincipalName")
+            st.success(f"✅ Logged in as {st.session_state.user_email}")
         else:
-            st.error(f"❌ Login failed: {result.get('error_description')}")
+            st.error("Login failed. Please try again.")
+
+    else:
+        # ✅ Create login button
+        auth_url = app.get_authorization_request_url(
+            SCOPE,
+            redirect_uri=REDIRECT_URI
+        )
+        st.markdown(f"[🔐 **Click here to Sign in with Microsoft**]({auth_url})", unsafe_allow_html=True)
+
 else:
-    st.success(f"✅ Logged in as {st.session_state.user_email or 'user'}")
+    st.success(f"✅ Logged in as {st.session_state.user_email}")
 
 # ==============================
 # 📨 Step 2: Fetch Lead
