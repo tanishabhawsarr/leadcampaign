@@ -16,7 +16,7 @@ TENANT_ID = os.getenv("TENANT_ID")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET")
 
 AUTHORITY = f"https://login.microsoftonline.com/{TENANT_ID}"
-REDIRECT_URI = "http://localhost:8501"   # <--- IMPORTANT
+REDIRECT_URI = "https://leadcampaign.onrender.com/"   # <--- IMPORTANT
 SCOPE = ["User.Read", "Mail.Send"]
 
 st.set_page_config(page_title="📧 Addend Analytics Email Campaign", page_icon="📨")
