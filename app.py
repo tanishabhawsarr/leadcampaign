@@ -107,6 +107,8 @@ if st.button("Fetch Lead"):
 
         st.markdown("### ✉️ Email Preview")
         st.markdown(body, unsafe_allow_html=True)
+        print("Generated Subject:", subject)
+        print("Generated Body:", body)
     else:
         st.warning("⚠️ No lead found.")
 
