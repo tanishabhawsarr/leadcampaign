@@ -5,3 +5,4 @@ msal
 python-dotenv
 google-generativeai
 azure-data-tables
+openpyxl
