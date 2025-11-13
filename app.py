@@ -20,13 +20,21 @@ SCOPE = ["User.Read", "Mail.Send"]
 
 # ✅ Auto-Switch Redirect URI (Local <-> Render)
 def get_redirect_uri():
+    # 1. Render hosting
     render_url = os.getenv("RENDER_EXTERNAL_URL")
     if render_url:
         return render_url.rstrip("/") + "/"
+
+    # 2. Azure App Service hosting
+    azure_hostname = os.getenv("WEBSITE_HOSTNAME")
+    if azure_hostname:
+        return f"https://{azure_hostname}/"
+
+    # 3. Local development
     return "http://localhost:8501/"
+    
 
 REDIRECT_URI = get_redirect_uri()
-
 # -----------------------------
 # 🌐 Streamlit UI Setup
 st.set_page_config(page_title="📧 Addend Analytics Email Campaign", page_icon="📨")
