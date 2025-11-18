@@ -115,12 +115,12 @@ def create_mail(customer_name, company, offer, MODEL="gemini-2.5-flash"):
 
     Follow these exact instructions:
     1. Start the email by thanking the customer for exploring or trying the report.
-       Example: "Thank you so much for exploring our {offer}. I'd love to hear your experience 
+       Example: "Thank you so much for exploring our {offer}. We'd love to hear your experience 
        and if you need any assistance with it."
 
     2. Write the rest of the email in a friendly, conversational yet professional tone.
        - Briefly restate the value or benefits of the {offer}.
-       - If app details are available, use them naturally to describe what the report helps achieve.
+       - If app details are available, use them naturally to describe what the report helps in their {company} to achieve in 2-3 lines.
        - Mention 3–4 bullet points (if relevant) highlighting what the report or product enables.
        - Optionally, suggest a quick walkthrough or discussion for further assistance.
 

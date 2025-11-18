@@ -191,39 +191,32 @@ def fetch_new_leads_since(cutoff_timestamp):
 
     entities = table_client.list_entities()
 
+    
     for entity in entities:
+        try:
+            created_str = entity.get("CreatedTime", "")
+            created_dt = datetime.strptime(created_str, "%m/%d/%Y %H:%M:%S")
 
-        created_str = entity.get("CreatedTime", "").strip()
-        created_dt = parse_datetime(created_str)
+            # Only show leads created AFTER last processed time
+            if cutoff_timestamp and created_dt <= cutoff_timestamp:
+                continue
 
-        # If date cannot be parsed → skip lead
-        if not created_dt:
+            customer = json.loads(entity.get("CustomerInfo", "{}") or "{}")
+
+            results.append({
+                "PartitionKey": entity["PartitionKey"],
+                "RowKey": entity["RowKey"],
+                "CreatedTime": created_str,
+                "Created_dt": created_dt,
+                "Name": f"{customer.get('FirstName', '')} {customer.get('LastName', '')}",
+                "Email": customer.get("Email", ""),
+                "Company": customer.get("Company", ""),
+                "OfferDisplayName": entity.get("OfferDisplayName", ""),
+                "LeadSource": entity.get("LeadSource", "")
+            })
+
+        except Exception:
             continue
 
-        # Only show today's leads
-        if created_dt.date() != today:
-            continue
-
-        # Only fetch leads AFTER last processed
-        if cutoff_timestamp and created_dt <= cutoff_timestamp:
-            continue
-
-        # Parse customer info
-        customer = json.loads(entity.get("CustomerInfo", "{}") or "{}")
-
-        results.append({
-            "PartitionKey": entity["PartitionKey"],
-            "RowKey": entity["RowKey"],
-            "CreatedTime": created_str,
-            "Created_dt": created_dt,
-            "Name": f"{customer.get('FirstName', '')} {customer.get('LastName', '')}",
-            "Email": customer.get("Email", ""),
-            "Company": customer.get("Company", ""),
-            "OfferDisplayName": entity.get("OfferDisplayName", ""),
-            "LeadSource": entity.get("LeadSource", "")
-        })
-
-    # Sort newest first
     results.sort(key=lambda x: x["Created_dt"], reverse=True)
-
     return results
