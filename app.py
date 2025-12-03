@@ -685,77 +685,124 @@
 
 
 
-import streamlit as st
-import requests
-import os
-import time
-from datetime import datetime
-from dotenv import load_dotenv
 
-from fetchdata import fetch_new_leads_since
-from generatemail import create_mail
-from state_manager import load_last_processed, save_last_processed
-
-load_dotenv()
-
-# ---------------------------------------------------------
-# SAFE AUTO REFRESH — REQUIRED TO FETCH NEW LEADS
-# ---------------------------------------------------------
-  # Soft rerun (keeps UI & state)
-# ---------------------------------------------------------
+## ----- main app.py jo deploy krne k liye use kra tha okay 
 
 
-# ---------------------------------------------------------
-# STREAMLIT UI SETUP
-# ---------------------------------------------------------
-st.set_page_config(page_title="Leads Email Campaign", page_icon="📧", layout="wide")
-st.title("📧 Addend Analytics - Leads Email Campaign")
 
 
-st.write("### 🔄 Refresh Leads")
-if st.button("Refresh Now"):
-    st.rerun()
-# ---------------------------------------------------------
-# SESSION INITIALIZATION
-# ---------------------------------------------------------
-if "leads" not in st.session_state:
-    st.session_state.leads = []
+# import streamlit as st
+# import requests
+# import os
+# import time
+# from datetime import datetime
+# from dotenv import load_dotenv
 
-if "send_lead" not in st.session_state:
-    st.session_state.send_lead = None  # Stores the lead being previewed
+# from fetchdata import fetch_new_leads_since
+# from generatemail import create_mail
+# from state_manager import load_last_processed, save_last_processed
 
-if "generated_emails" not in st.session_state:
-    st.session_state.generated_emails = {}  # Cache emails
+# load_dotenv()
 
-if "access_token" not in st.session_state:
-    st.session_state.access_token = None
-    st.session_state.user_email = None
+# # ---------------------------------------------------------
+# # SAFE AUTO REFRESH — REQUIRED TO FETCH NEW LEADS
+# # ---------------------------------------------------------
+#   # Soft rerun (keeps UI & state)
+# # ---------------------------------------------------------
 
 
-# ---------------------------------------------------------
-# MICROSOFT LOGIN
-# ---------------------------------------------------------
-try:
-    import msal
-    MSAL_AVAILABLE = True
-except:
-    MSAL_AVAILABLE = False
+# # ---------------------------------------------------------
+# # STREAMLIT UI SETUP
+# # ---------------------------------------------------------
+# st.set_page_config(page_title="Leads Email Campaign", page_icon="📧", layout="wide")
+# st.title("📧 Addend Analytics - Leads Email Campaign")
 
-CLIENT_ID = os.getenv("CLIENT_ID")
-TENANT_ID = os.getenv("TENANT_ID")
-CLIENT_SECRET = os.getenv("CLIENT_SECRET")
-AUTHORITY = f"https://login.microsoftonline.com/{TENANT_ID}"
-SCOPE = ["User.Read", "Mail.Send"]
 
-def get_redirect_uri():
-    hostname = os.getenv("WEBSITE_HOSTNAME")
-    if hostname:
-        return f"https://{hostname}/"
-    return "http://localhost:8501/"
+# st.write("### 🔄 Refresh Leads")
+# if st.button("Refresh Now"):
+#     st.rerun()
+# # ---------------------------------------------------------
+# # SESSION INITIALIZATION
+# # ---------------------------------------------------------
+# if "leads" not in st.session_state:
+#     st.session_state.leads = []
 
-REDIRECT_URI = get_redirect_uri()
+# if "send_lead" not in st.session_state:
+#     st.session_state.send_lead = None  # Stores the lead being previewed
 
-st.sidebar.header("Microsoft Login")
+# if "generated_emails" not in st.session_state:
+#     st.session_state.generated_emails = {}  # Cache emails
+
+# if "access_token" not in st.session_state:
+#     st.session_state.access_token = None
+#     st.session_state.user_email = None
+
+
+# # ---------------------------------------------------------
+# # MICROSOFT LOGIN
+# # ---------------------------------------------------------
+# try:
+#     import msal
+#     MSAL_AVAILABLE = True
+# except:
+#     MSAL_AVAILABLE = False
+
+# CLIENT_ID = os.getenv("CLIENT_ID")
+# TENANT_ID = os.getenv("TENANT_ID")
+# CLIENT_SECRET = os.getenv("CLIENT_SECRET")
+# AUTHORITY = f"https://login.microsoftonline.com/{TENANT_ID}"
+# SCOPE = ["User.Read", "Mail.Send"]
+
+# def get_redirect_uri():
+#     hostname = os.getenv("WEBSITE_HOSTNAME")
+#     if hostname:
+#         return f"https://{hostname}/"
+#     return "http://localhost:8501/"
+
+# REDIRECT_URI = get_redirect_uri()
+
+# st.sidebar.header("Microsoft Login")
+
+# # if MSAL_AVAILABLE and not st.session_state.access_token:
+
+# #     app = msal.ConfidentialClientApplication(
+# #         CLIENT_ID, authority=AUTHORITY, client_credential=CLIENT_SECRET
+# #     )
+
+# #     params = st.query_params
+# #     code = params.get("code")
+
+# #     if code:
+# #         result = app.acquire_token_by_authorization_code(
+# #             code, scopes=SCOPE, redirect_uri=REDIRECT_URI
+# #         )
+# #         if "access_token" in result:
+
+# #             st.session_state.access_token = result["access_token"]
+# #             st.query_params.clear()
+
+# #             # Force refresh so new leads load immediately after login
+# #             st.rerun()
+
+# #         else:
+# #             st.error("Login failed.")
+# #             st.stop()
+
+# #     else:
+# #         auth_url = app.get_authorization_request_url(
+# #             scopes=SCOPE,
+# #             redirect_uri=REDIRECT_URI,
+# #             prompt="select_account"
+# #         )
+# #         st.markdown(f"[🔐 Click to Sign in with Microsoft]({auth_url})")
+# #         st.stop()
+# # else:
+# #     if st.session_state.access_token:
+# #         st.sidebar.success(f"Logged in as {st.session_state.user_email}")
+# #     else:
+# #         st.sidebar.info("Login disabled — cannot send emails.")
+
+
 
 # if MSAL_AVAILABLE and not st.session_state.access_token:
 
@@ -766,16 +813,30 @@ st.sidebar.header("Microsoft Login")
 #     params = st.query_params
 #     code = params.get("code")
 
+#     # -------------------------------
+#     # FIXED LOGIN FLOW
+#     # -------------------------------
 #     if code:
 #         result = app.acquire_token_by_authorization_code(
 #             code, scopes=SCOPE, redirect_uri=REDIRECT_URI
 #         )
+
 #         if "access_token" in result:
 
+#             # Save token
 #             st.session_state.access_token = result["access_token"]
+
+#             # REMOVE code from URL
 #             st.query_params.clear()
 
-#             # Force refresh so new leads load immediately after login
+#             # Fetch USER PROFILE BEFORE rerun (THIS WAS MISSING!)
+#             me = requests.get(
+#                 "https://graph.microsoft.com/v1.0/me",
+#                 headers={"Authorization": f"Bearer {result['access_token']}"}
+#             ).json()
+
+#             st.session_state.user_email = me.get("mail") or me.get("userPrincipalName")
+
 #             st.rerun()
 
 #         else:
@@ -790,222 +851,167 @@ st.sidebar.header("Microsoft Login")
 #         )
 #         st.markdown(f"[🔐 Click to Sign in with Microsoft]({auth_url})")
 #         st.stop()
+
+
+# # ALREADY LOGGED IN
 # else:
 #     if st.session_state.access_token:
 #         st.sidebar.success(f"Logged in as {st.session_state.user_email}")
 #     else:
-#         st.sidebar.info("Login disabled — cannot send emails.")
+#         st.sidebar.warning("Login disabled — cannot send emails.")
 
 
 
-if MSAL_AVAILABLE and not st.session_state.access_token:
+# # ---------------------------------------------------------
+# # FULL-SCREEN CONFIRM SEND UI
+# # ---------------------------------------------------------
+# if st.session_state.send_lead:
 
-    app = msal.ConfidentialClientApplication(
-        CLIENT_ID, authority=AUTHORITY, client_credential=CLIENT_SECRET
-    )
+#     lead = st.session_state.send_lead
 
-    params = st.query_params
-    code = params.get("code")
+#     st.markdown("## 📨 Confirm & Send Email")
 
-    # -------------------------------
-    # FIXED LOGIN FLOW
-    # -------------------------------
-    if code:
-        result = app.acquire_token_by_authorization_code(
-            code, scopes=SCOPE, redirect_uri=REDIRECT_URI
-        )
+#     st.write(f"**To:** {lead['email']}")
+#     st.write(f"**Subject:** {lead['subject']}")
 
-        if "access_token" in result:
+#     wrapper_start = """
+#     <div style="
+#         max-width: 1000px;
+#         margin: 18px auto;
+#         background: #11151c;
+#         color: #e6eef6;
+#         border-radius: 10px;
+#         padding: 28px;
+#         box-shadow: 0 4px 25px rgba(0,0,0,0.5);
+#         line-height: 1.6;
+#         font-family: Arial, sans-serif;
+#     ">
+#     """
+#     wrapper_end = "</div>"
 
-            # Save token
-            st.session_state.access_token = result["access_token"]
+#     body_html = lead["body"]
+#     body_html = body_html.replace("<html>", "").replace("</html>", "")
+#     body_html = body_html.replace("<body>", "").replace("</body>", "")
 
-            # REMOVE code from URL
-            st.query_params.clear()
+#     st.markdown(wrapper_start + body_html + wrapper_end, unsafe_allow_html=True)
 
-            # Fetch USER PROFILE BEFORE rerun (THIS WAS MISSING!)
-            me = requests.get(
-                "https://graph.microsoft.com/v1.0/me",
-                headers={"Authorization": f"Bearer {result['access_token']}"}
-            ).json()
+#     confirm_col, cancel_col = st.columns([1, 1])
 
-            st.session_state.user_email = me.get("mail") or me.get("userPrincipalName")
+#     if confirm_col.button("✔ Confirm Send"):
 
-            st.rerun()
+#         email_msg = {
+#             "message": {
+#                 "subject": lead["subject"],
+#                 "body": {"contentType": "HTML", "content": lead["body"]},
+#                 "toRecipients": [{"emailAddress": {"address": lead["email"]}}],
+#             },
+#             "saveToSentItems": True,
+#         }
 
-        else:
-            st.error("Login failed.")
-            st.stop()
+#         headers = {
+#             "Authorization": f"Bearer {st.session_state.access_token}",
+#             "Content-Type": "application/json"
+#         }
 
-    else:
-        auth_url = app.get_authorization_request_url(
-            scopes=SCOPE,
-            redirect_uri=REDIRECT_URI,
-            prompt="select_account"
-        )
-        st.markdown(f"[🔐 Click to Sign in with Microsoft]({auth_url})")
-        st.stop()
+#         resp = requests.post(
+#             "https://graph.microsoft.com/v1.0/me/sendMail",
+#             headers=headers,
+#             json=email_msg
+#         )
 
+#         if resp.status_code in (200, 201, 202):
+#             st.success("📨 Email sent successfully!")
 
-# ALREADY LOGGED IN
-else:
-    if st.session_state.access_token:
-        st.sidebar.success(f"Logged in as {st.session_state.user_email}")
-    else:
-        st.sidebar.warning("Login disabled — cannot send emails.")
+#             save_last_processed(lead["created"])
 
+#             if lead["rk"] in st.session_state.generated_emails:
+#                 del st.session_state.generated_emails[lead["rk"]]
 
+#             st.session_state.send_lead = None
+#             st.rerun()
 
-# ---------------------------------------------------------
-# FULL-SCREEN CONFIRM SEND UI
-# ---------------------------------------------------------
-if st.session_state.send_lead:
+#         else:
+#             st.error("❌ Failed to send email.")
 
-    lead = st.session_state.send_lead
-
-    st.markdown("## 📨 Confirm & Send Email")
-
-    st.write(f"**To:** {lead['email']}")
-    st.write(f"**Subject:** {lead['subject']}")
-
-    wrapper_start = """
-    <div style="
-        max-width: 1000px;
-        margin: 18px auto;
-        background: #11151c;
-        color: #e6eef6;
-        border-radius: 10px;
-        padding: 28px;
-        box-shadow: 0 4px 25px rgba(0,0,0,0.5);
-        line-height: 1.6;
-        font-family: Arial, sans-serif;
-    ">
-    """
-    wrapper_end = "</div>"
-
-    body_html = lead["body"]
-    body_html = body_html.replace("<html>", "").replace("</html>", "")
-    body_html = body_html.replace("<body>", "").replace("</body>", "")
-
-    st.markdown(wrapper_start + body_html + wrapper_end, unsafe_allow_html=True)
-
-    confirm_col, cancel_col = st.columns([1, 1])
-
-    if confirm_col.button("✔ Confirm Send"):
-
-        email_msg = {
-            "message": {
-                "subject": lead["subject"],
-                "body": {"contentType": "HTML", "content": lead["body"]},
-                "toRecipients": [{"emailAddress": {"address": lead["email"]}}],
-            },
-            "saveToSentItems": True,
-        }
-
-        headers = {
-            "Authorization": f"Bearer {st.session_state.access_token}",
-            "Content-Type": "application/json"
-        }
-
-        resp = requests.post(
-            "https://graph.microsoft.com/v1.0/me/sendMail",
-            headers=headers,
-            json=email_msg
-        )
-
-        if resp.status_code in (200, 201, 202):
-            st.success("📨 Email sent successfully!")
-
-            save_last_processed(lead["created"])
-
-            if lead["rk"] in st.session_state.generated_emails:
-                del st.session_state.generated_emails[lead["rk"]]
-
-            st.session_state.send_lead = None
-            st.rerun()
-
-        else:
-            st.error("❌ Failed to send email.")
-
-    if cancel_col.button("✖ Cancel"):
-        st.session_state.send_lead = None
-        st.rerun()
+#     if cancel_col.button("✖ Cancel"):
+#         st.session_state.send_lead = None
+#         st.rerun()
 
 
-# ---------------------------------------------------------
-# BACKEND LEAD FETCH (EVERY 30 SEC or FIRST LOAD)
-# ---------------------------------------------------------
+# # ---------------------------------------------------------
+# # BACKEND LEAD FETCH (EVERY 30 SEC or FIRST LOAD)
+# # ---------------------------------------------------------
 
-last_processed_str = load_last_processed()
+# last_processed_str = load_last_processed()
 
-if last_processed_str:
-    cutoff_time = datetime.strptime(last_processed_str, "%m/%d/%Y %H:%M:%S")
-else:
-    today = datetime.now().strftime("%m/%d/%Y")
-    cutoff_time = datetime.strptime(today + " 00:00:00", "%m/%d/%Y %H:%M:%S")
+# if last_processed_str:
+#     cutoff_time = datetime.strptime(last_processed_str, "%m/%d/%Y %H:%M:%S")
+# else:
+#     today = datetime.now().strftime("%m/%d/%Y")
+#     cutoff_time = datetime.strptime(today + " 00:00:00", "%m/%d/%Y %H:%M:%S")
 
-st.session_state.leads = fetch_new_leads_since(cutoff_time)
-
-
-# ---------------------------------------------------------
-# DISPLAY LEADS
-# ---------------------------------------------------------
-st.subheader("Live Leads")
-
-if not st.session_state.leads:
-    st.info("No new leads available...")
-else:
-    for lead in st.session_state.leads:
-
-        rk = lead["RowKey"]
-        name = lead["Name"]
-        email = lead["Email"]
-        company = lead["Company"]
-        offer = lead["OfferDisplayName"]
-        created = lead["CreatedTime"]
-
-        col1, col2, col3, col4 = st.columns([3,3,3,1])
-
-        with col1:
-            st.markdown(f"### {name}")
-            st.write(f"📧 {email}")
-            st.write(f"🏢 {company}")
-
-        with col2:
-            st.write(f"🧩 {offer}")
-            st.write(f"📥 {lead['LeadSource']}")
-
-        with col3:
-            st.write(f"⏱ {created}")
-
-        with col4:
-            if st.button("Send", key=f"send_{rk}"):
-
-                if rk not in st.session_state.generated_emails:
-                    subject, body_html = create_mail(name, company, offer)
-                    st.session_state.generated_emails[rk] = {
-                        "subject": subject,
-                        "body": body_html,
-                        "email": email,
-                        "created": created
-                    }
-
-                st.session_state.send_lead = {
-                    "rk": rk,
-                    "email": email,
-                    "subject": st.session_state.generated_emails[rk]["subject"],
-                    "body": st.session_state.generated_emails[rk]["body"],
-                    "created": created
-                }
-
-                st.rerun()
+# st.session_state.leads = fetch_new_leads_since(cutoff_time)
 
 
-# ---------------------------------------------------------
-# FOOTER
-# ---------------------------------------------------------
-st.markdown("---")
-st.caption(f"Last updated: {datetime.now().strftime('%H:%M:%S')}")
+# # ---------------------------------------------------------
+# # DISPLAY LEADS
+# # ---------------------------------------------------------
+# st.subheader("Live Leads")
+
+# if not st.session_state.leads:
+#     st.info("No new leads available...")
+# else:
+#     for lead in st.session_state.leads:
+
+#         rk = lead["RowKey"]
+#         name = lead["Name"]
+#         email = lead["Email"]
+#         company = lead["Company"]
+#         offer = lead["OfferDisplayName"]
+#         created = lead["CreatedTime"]
+
+#         col1, col2, col3, col4 = st.columns([3,3,3,1])
+
+#         with col1:
+#             st.markdown(f"### {name}")
+#             st.write(f"📧 {email}")
+#             st.write(f"🏢 {company}")
+
+#         with col2:
+#             st.write(f"🧩 {offer}")
+#             st.write(f"📥 {lead['LeadSource']}")
+
+#         with col3:
+#             st.write(f"⏱ {created}")
+
+#         with col4:
+#             if st.button("Send", key=f"send_{rk}"):
+
+#                 if rk not in st.session_state.generated_emails:
+#                     subject, body_html = create_mail(name, company, offer)
+#                     st.session_state.generated_emails[rk] = {
+#                         "subject": subject,
+#                         "body": body_html,
+#                         "email": email,
+#                         "created": created
+#                     }
+
+#                 st.session_state.send_lead = {
+#                     "rk": rk,
+#                     "email": email,
+#                     "subject": st.session_state.generated_emails[rk]["subject"],
+#                     "body": st.session_state.generated_emails[rk]["body"],
+#                     "created": created
+#                 }
+
+#                 st.rerun()
+
+
+# # ---------------------------------------------------------
+# # FOOTER
+# # ---------------------------------------------------------
+# st.markdown("---")
+# st.caption(f"Last updated: {datetime.now().strftime('%H:%M:%S')}")
 
 
 
@@ -1553,3 +1559,117 @@ st.caption(f"Last updated: {datetime.now().strftime('%H:%M:%S')}")
 # # ---------------------------------------------------------
 # st.markdown("---")
 # st.caption(f"Last updated: {datetime.now().strftime('%H:%M:%S')}")
+
+
+
+
+import os
+import time
+from datetime import datetime
+from dotenv import load_dotenv
+import requests
+import msal
+import traceback
+
+from fetchdata import fetch_new_leads_since
+from generatemail import create_mail
+from state_manager import load_last_processed, save_last_processed
+
+load_dotenv()
+
+TENANT_ID = os.getenv("TENANT_ID")
+CLIENT_ID = os.getenv("CLIENT_ID")
+CLIENT_SECRET = os.getenv("CLIENT_SECRET")
+
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")  # <-- tu apna email yahan set karega
+
+AUTHORITY = f"https://login.microsoftonline.com/{TENANT_ID}"
+
+SENDER_EMAIL = os.getenv("SENDER_EMAIL")
+
+CHECK_INTERVAL_SECONDS = 60
+
+
+def get_graph_token():
+    app = msal.ConfidentialClientApplication(
+        CLIENT_ID,
+        authority=AUTHORITY,
+        client_credential=CLIENT_SECRET
+    )
+    result = app.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
+    if "access_token" not in result:
+        raise Exception(f"Token error: {result}")
+    return result["access_token"]
+
+
+def send_graph_email(access_token, to_email, subject, body_html):
+    headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
+
+    payload = {
+        "message": {
+            "subject": subject,
+            "body": {"contentType": "HTML", "content": body_html},
+            "toRecipients": [{"emailAddress": {"address": to_email}}],
+        },
+        "saveToSentItems": True,
+    }
+
+    url = f"https://graph.microsoft.com/v1.0/users/{SENDER_EMAIL}/sendMail"
+    resp = requests.post(url, headers=headers, json=payload)
+    return resp.status_code in (200, 202)
+
+
+def send_error_email(error_message):
+    token = get_graph_token()
+    subject = "🚨 Lead Automation Error Alert"
+    body = f"""
+    <h2>⚠ Automation Error</h2>
+    <p><b>Time:</b> {datetime.now()}</p>
+    <p><b>Error:</b></p>
+    <pre>{error_message}</pre>
+    """
+
+    send_graph_email(token, ADMIN_EMAIL, subject, body)
+
+
+def main_loop():
+    print("🚀 Auto Sender Running...")
+
+    while True:
+        try:
+            last_time = load_last_processed()
+            if last_time:
+                cutoff = datetime.strptime(last_time, "%m/%d/%Y %H:%M:%S")
+            else:
+                cutoff = datetime.now()
+
+            leads = fetch_new_leads_since(cutoff)
+
+            if leads:
+                token = get_graph_token()
+                leads_sorted = sorted(leads, key=lambda x: x["Created_dt"])
+
+                for lead in leads_sorted:
+                    subject, body = create_mail(lead["Name"], lead["Company"], lead["OfferDisplayName"])
+                    success = send_graph_email(token, lead["Email"], subject, body)
+
+                    if success:
+                        save_last_processed(lead["CreatedTime"])
+                        print(f"📧 Sent to: {lead['Email']} | {lead['Name']}")
+                    else:
+                        raise Exception(f"Mail failed for {lead['Email']}")
+
+            else:
+                print("⏳ No new leads...")
+
+        except Exception as e:
+            error_text = traceback.format_exc()
+            print("💥 ERROR:", error_text)
+            send_error_email(error_text)
+
+        print(f"😴 Sleeping {CHECK_INTERVAL_SECONDS}s...\n")
+        time.sleep(CHECK_INTERVAL_SECONDS)
+
+
+if __name__ == "__main__":
+    main_loop()
