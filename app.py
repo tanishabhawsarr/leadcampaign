@@ -1603,9 +1603,8 @@ def get_graph_token():
 
 
 def send_graph_email(access_token, to_email, subject, body_html):
-    headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
-
-    payload = {
+    headers = {"Authorization": f"Bearer " + access_token, "Content-Type": "application/json"}
+    email_msg = {
         "message": {
             "subject": subject,
             "body": {"contentType": "HTML", "content": body_html},
@@ -1615,8 +1614,13 @@ def send_graph_email(access_token, to_email, subject, body_html):
     }
 
     url = f"https://graph.microsoft.com/v1.0/users/{SENDER_EMAIL}/sendMail"
-    resp = requests.post(url, headers=headers, json=payload)
+    resp = requests.post(url, headers=headers, json=email_msg)
+
+    # 👉 ADD THIS ONLY
+    print("STATUS:", resp.status_code, "| RESPONSE:", resp.text)
+
     return resp.status_code in (200, 202)
+
 
 
 def send_error_email(error_message):
