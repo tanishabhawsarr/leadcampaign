@@ -1756,10 +1756,24 @@ def main_loop():
     # Load last successfully processed timestamp from file
     last_processed_str = load_last_processed()
 
+    # If running first time, do NOT process old leads
     if last_processed_str:
         last_processed = datetime.strptime(last_processed_str, "%m/%d/%Y %H:%M:%S")
     else:
-        last_processed = datetime.now()
+        print("⚠ First run detected... capturing latest lead timestamp and skipping older leads.")
+
+        all_leads = fetch_new_leads_since(None)  # get everything
+
+        if all_leads:
+            latest = max(all_leads, key=lambda x: x["Created_dt"])
+            last_processed = latest["Created_dt"]
+            save_last_processed(latest["CreatedTime"])
+            print(f"📌 Baseline set -> Starting AFTER: {latest['CreatedTime']}")
+        else:
+            # No leads exist yet
+            last_processed = datetime.now()
+            print("📌 No existing leads found, waiting for first one...")
+
 
     while True:
         try:
