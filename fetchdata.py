@@ -175,33 +175,58 @@ def parse_datetime(dt_str):
     return None
 
 
+import pytz
+IST = pytz.timezone("Asia/Kolkata")
+
+def normalize_datetime(dt_str):
+    formats = [
+        "%m/%d/%Y %H:%M:%S",
+        "%m/%d/%Y, %I:%M:%S %p",
+        "%d/%m/%Y %H:%M:%S",
+        "%Y-%m-%d %H:%M:%S"
+    ]
+
+    for f in formats:
+        try:
+            dt = datetime.strptime(dt_str, f)
+
+            # Convert parsed datetime → IST → remove timezone for clean comparison
+            dt = IST.localize(dt).astimezone(IST).replace(tzinfo=None)
+            return dt
+        except:
+            pass
+
+    return None
+
 def fetch_new_leads_since(last_timestamp):
     results = []
 
     for entity in table_client.list_entities():
-        
         created_str = entity.get("CreatedTime", "").strip()
-        created_dt = parse_datetime(created_str)
+        created_dt = normalize_datetime(created_str)
 
         if not created_dt:
-            print(f"⚠ Skip unreadable datetime: {created_str}")
+            print(f"⚠️ Could not parse: {created_str}")
             continue
 
+        print(f"➡️ {created_dt}  | compare with  {last_timestamp}")
+
         if created_dt <= last_timestamp:
-            continue  # skip old
+            continue
 
         customer = json.loads(entity.get("CustomerInfo", "{}") or "{}")
 
         results.append({
             "Created_dt": created_dt,
             "CreatedTime": created_str,
-            "Name": f"{customer.get('FirstName', '')} {customer.get('LastName', '')}".strip(),
+            "Name": f"{customer.get('FirstName','')} {customer.get('LastName','')}".strip(),
             "Email": customer.get("Email", ""),
             "Company": customer.get("Company", ""),
             "OfferDisplayName": entity.get("OfferDisplayName", "")
         })
 
-    return sorted(results, key=lambda x: x["Created_dt"])
+    results.sort(key=lambda x: x["Created_dt"])
+    return results
 
 
 # # ---------------------------
