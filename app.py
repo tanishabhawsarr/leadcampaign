@@ -1758,7 +1758,8 @@ def main_loop():
 
     # If running first time, do NOT process old leads
     if last_processed_str:
-        last_processed = datetime.strptime(last_processed_str, "%m/%d/%Y %H:%M:%S")
+        last_processed = last_processed = datetime.strptime(last_processed_str, "%m/%d/%Y %H:%M:%S").replace(tzinfo=None)
+
     else:
         print("⚠ First run detected... capturing latest lead timestamp and skipping older leads.")
 
@@ -1773,7 +1774,6 @@ def main_loop():
             # No leads exist yet
             last_processed = datetime.now()
             print("📌 No existing leads found, waiting for first one...")
-
 
     while True:
         try:

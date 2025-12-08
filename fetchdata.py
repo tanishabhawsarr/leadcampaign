@@ -182,25 +182,72 @@ def parse_datetime(dt_str):
     return None   # Unparsable
 
 
-# ---------------------------
-# FETCH NEW LEADS SINCE CUT-OFF
-# ---------------------------
+# # ---------------------------
+# # FETCH NEW LEADS SINCE CUT-OFF
+# # ---------------------------
+# def fetch_new_leads_since(cutoff_timestamp):
+#     results = []
+#     today = date.today()
+
+#     entities = table_client.list_entities()
+
+    
+#     for entity in entities:
+#         try:
+#             created_str = entity.get("CreatedTime", "")
+#             created_dt = datetime.strptime(created_str, "%m/%d/%Y %H:%M:%S")
+
+#             # Only show leads created AFTER last processed time
+#             if cutoff_timestamp and created_dt <= cutoff_timestamp:
+#                 continue
+
+#             customer = json.loads(entity.get("CustomerInfo", "{}") or "{}")
+
+#             results.append({
+#                 "PartitionKey": entity["PartitionKey"],
+#                 "RowKey": entity["RowKey"],
+#                 "CreatedTime": created_str,
+#                 "Created_dt": created_dt,
+#                 "Name": f"{customer.get('FirstName', '')} {customer.get('LastName', '')}",
+#                 "Email": customer.get("Email", ""),
+#                 "Company": customer.get("Company", ""),
+#                 "OfferDisplayName": entity.get("OfferDisplayName", ""),
+#                 "LeadSource": entity.get("LeadSource", "")
+#             })
+
+#         except Exception:
+#             continue
+
+#     results.sort(key=lambda x: x["Created_dt"], reverse=True)
+#     return results
+
 def fetch_new_leads_since(cutoff_timestamp):
     results = []
-    today = date.today()
 
     entities = table_client.list_entities()
 
-    
     for entity in entities:
         try:
-            created_str = entity.get("CreatedTime", "")
+            created_str = entity.get("CreatedTime", "").strip()
+
+            # Parse datetime
             created_dt = datetime.strptime(created_str, "%m/%d/%Y %H:%M:%S")
 
-            # Only show leads created AFTER last processed time
+            # Normalize timestamps (fix UTC vs local issue)
+            if cutoff_timestamp:
+                cutoff_timestamp = cutoff_timestamp.replace(tzinfo=None)
+            created_dt = created_dt.replace(tzinfo=None)
+
+            # Debug print for understanding comparison
+            if cutoff_timestamp:
+                print(f"⏳ Comparing: Lead={created_dt} | LastProcessed={cutoff_timestamp}")
+
+            # Skip already processed leads
             if cutoff_timestamp and created_dt <= cutoff_timestamp:
+                print(f"⛔ Skipped old lead: {created_str}")
                 continue
 
+            # Extract lead info
             customer = json.loads(entity.get("CustomerInfo", "{}") or "{}")
 
             results.append({
@@ -215,8 +262,10 @@ def fetch_new_leads_since(cutoff_timestamp):
                 "LeadSource": entity.get("LeadSource", "")
             })
 
-        except Exception:
+        except Exception as e:
+            print("⚠ Lead Parse Error:", e)
             continue
 
-    results.sort(key=lambda x: x["Created_dt"], reverse=True)
+    # sort oldest → newest (correct order for sending)
+    results.sort(key=lambda x: x["Created_dt"])
     return results
