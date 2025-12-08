@@ -1677,18 +1677,12 @@
 
 # if __name__ == "__main__":
 #     main_loop()
-
-import os
-import time
+import os, time, traceback
 from datetime import datetime
 from dotenv import load_dotenv
-import requests
-import msal
-import traceback
-
+import requests, msal
 from fetchdata import fetch_new_leads_since
 from generatemail import create_mail
-from state_manager import load_last_processed, save_last_processed
 
 load_dotenv()
 
@@ -1698,115 +1692,64 @@ CLIENT_SECRET = os.getenv("CLIENT_SECRET")
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")
 SENDER_EMAIL = os.getenv("SENDER_EMAIL")
 
-AUTHORITY = f"https://login.microsoftonline.com/{TENANT_ID}"
-CHECK_INTERVAL_SECONDS = 30   # ⏳ Poll every 30 sec
+CHECK_INTERVAL = 30  # seconds
+
+last_timestamp = datetime.now()  # initialized fresh start
 
 
 def get_graph_token():
     app = msal.ConfidentialClientApplication(
         CLIENT_ID,
-        authority=AUTHORITY,
+        authority=f"https://login.microsoftonline.com/{TENANT_ID}",
         client_credential=CLIENT_SECRET
     )
-    result = app.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
-
-    if "access_token" not in result:
-        raise Exception(f"Token error: {result}")
-
-    return result["access_token"]
+    token = app.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
+    return token["access_token"]
 
 
-def send_graph_email(access_token, to_email, subject, body_html):
+def send_email(token, to, subject, body):
     url = f"https://graph.microsoft.com/v1.0/users/{SENDER_EMAIL}/sendMail"
-    headers = {
-        "Authorization": f"Bearer {access_token}",
-        "Content-Type": "application/json"
-    }
-
-    email_msg = {
+    payload = {
         "message": {
             "subject": subject,
-            "body": {"contentType": "HTML", "content": body_html},
-            "toRecipients": [{"emailAddress": {"address": to_email}}],
+            "body": {"contentType": "HTML", "content": body},
+            "toRecipients": [{"emailAddress": {"address": to}}]
         },
         "saveToSentItems": True
     }
-
-    response = requests.post(url, headers=headers, json=email_msg)
-
-    print(f"📨 Mail Status: {response.status_code} | {to_email}")
-
-    return response.status_code in (200, 202)
-
-
-def send_error_email(error_msg):
-    token = get_graph_token()
-    subject = "⚠️ Automation Error"
-    body = f"""
-    <h3>Error occurred:</h3>
-    <pre>{error_msg}</pre>
-    <p>Time: {datetime.now()}</p>
-    """
-    send_graph_email(token, ADMIN_EMAIL, subject, body)
+    return requests.post(url, headers={"Authorization": f"Bearer {token}"}, json=payload)
 
 
 def main_loop():
-    print("🚀 Lead Monitoring ON...")
+    global last_timestamp
 
-    # Load last successfully processed timestamp from file
-    last_processed_str = load_last_processed()
-
-    # If running first time, do NOT process old leads
-    if last_processed_str:
-        last_processed = last_processed = datetime.strptime(last_processed_str, "%m/%d/%Y %H:%M:%S").replace(tzinfo=None)
-
-    else:
-        print("⚠ First run detected... capturing latest lead timestamp and skipping older leads.")
-
-        all_leads = fetch_new_leads_since(None)  # get everything
-
-        if all_leads:
-            latest = max(all_leads, key=lambda x: x["Created_dt"])
-            last_processed = latest["Created_dt"]
-            save_last_processed(latest["CreatedTime"])
-            print(f"📌 Baseline set -> Starting AFTER: {latest['CreatedTime']}")
-        else:
-            # No leads exist yet
-            last_processed = datetime.now()
-            print("📌 No existing leads found, waiting for first one...")
+    print("🚀 Running Lead Listener...")
 
     while True:
         try:
-            print("🔎 Checking for new leads...")
+            leads = fetch_new_leads_since(last_timestamp)
 
-            new_leads = fetch_new_leads_since(last_processed)
+            if leads:
+                print(f"📌 New Leads Found: {len(leads)}")
 
-            if new_leads:
                 token = get_graph_token()
 
-                # Always process in proper time order from old -> new
-                sorted_leads = sorted(new_leads, key=lambda x: x["Created_dt"])
-
-                for lead in sorted_leads:
+                for lead in leads:
                     subject, body = create_mail(lead["Name"], lead["Company"], lead["OfferDisplayName"])
-                    success = send_graph_email(token, lead["Email"], subject, body)
 
-                    if success:
-                        print(f"✅ Email sent to {lead['Email']} ({lead['Name']})")
-                        last_processed = lead["Created_dt"]
-                        save_last_processed(lead["CreatedTime"])
-                    else:
-                        print(f"⚠️ FAILED: {lead['Email']}")
+                    res = send_email(token, lead["Email"], subject, body)
+                    print(f"📨 Sent: {lead['Email']} | Status: {res.status_code}")
+
+                    # update last timestamp
+                    last_timestamp = lead["Created_dt"]
+
             else:
-                print("⏳ No leads found.")
+                print("⏳ No new leads...")
 
         except Exception as e:
-            err = traceback.format_exc()
-            print("💥 ERROR:", err)
-            send_error_email(err)
+            print("💥 ERROR:", traceback.format_exc())
 
-        print(f"😴 Waiting {CHECK_INTERVAL_SECONDS}s...\n")
-        time.sleep(CHECK_INTERVAL_SECONDS)
+        time.sleep(CHECK_INTERVAL)
 
 
 if __name__ == "__main__":

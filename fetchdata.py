@@ -141,12 +141,11 @@
 #     return results
 
 
-
 from azure.data.tables import TableServiceClient
-from datetime import datetime, date
-import os
-import json
+from datetime import datetime
+import os, json
 from dotenv import load_dotenv
+import pytz
 
 load_dotenv()
 
@@ -156,30 +155,53 @@ TABLE_NAME = os.getenv("TABLE_NAME")
 service = TableServiceClient.from_connection_string(CONN_STR)
 table_client = service.get_table_client(table_name=TABLE_NAME)
 
+# Convert all timestamps to IST for consistent comparison
+IST = pytz.timezone("Asia/Kolkata")
 
-# ---------------------------
-# SMART DATETIME PARSER
-# ---------------------------
+
 def parse_datetime(dt_str):
-    dt_str = dt_str.strip()
-
     formats = [
-        "%m/%d/%Y %H:%M:%S",        # 11/15/2025 20:02:52
-        "%m/%d/%Y, %I:%M:%S %p",    # 11/15/2025, 8:02:52 PM
-        "%d/%m/%Y %H:%M:%S",        # 15/11/2025 20:02:52
-        "%d/%m/%Y, %I:%M:%S %p",    # 15/11/2025, 8:02:52 PM
-        "%Y-%m-%d %H:%M:%S",        # 2025-11-15 20:02:52
-        "%d-%m-%Y %H:%M:%S",        # 15-11-2025 20:02:52
-        "%Y/%m/%d %H:%M:%S",        # 2025/11/15 20:02:52
+        "%m/%d/%Y %H:%M:%S",
+        "%m/%d/%Y, %I:%M:%S %p",
+        "%d/%m/%Y %H:%M:%S",
+        "%Y-%m-%d %H:%M:%S"
     ]
-
-    for fmt in formats:
+    for f in formats:
         try:
-            return datetime.strptime(dt_str, fmt)
+            dt = datetime.strptime(dt_str, f)
+            return IST.localize(dt).replace(tzinfo=None)  # normalized local time
         except:
             pass
+    return None
 
-    return None   # Unparsable
+
+def fetch_new_leads_since(last_timestamp):
+    results = []
+
+    for entity in table_client.list_entities():
+        
+        created_str = entity.get("CreatedTime", "").strip()
+        created_dt = parse_datetime(created_str)
+
+        if not created_dt:
+            print(f"⚠ Skip unreadable datetime: {created_str}")
+            continue
+
+        if created_dt <= last_timestamp:
+            continue  # skip old
+
+        customer = json.loads(entity.get("CustomerInfo", "{}") or "{}")
+
+        results.append({
+            "Created_dt": created_dt,
+            "CreatedTime": created_str,
+            "Name": f"{customer.get('FirstName', '')} {customer.get('LastName', '')}".strip(),
+            "Email": customer.get("Email", ""),
+            "Company": customer.get("Company", ""),
+            "OfferDisplayName": entity.get("OfferDisplayName", "")
+        })
+
+    return sorted(results, key=lambda x: x["Created_dt"])
 
 
 # # ---------------------------
@@ -220,52 +242,3 @@ def parse_datetime(dt_str):
 
 #     results.sort(key=lambda x: x["Created_dt"], reverse=True)
 #     return results
-
-def fetch_new_leads_since(cutoff_timestamp):
-    results = []
-
-    entities = table_client.list_entities()
-
-    for entity in entities:
-        try:
-            created_str = entity.get("CreatedTime", "").strip()
-
-            # Parse datetime
-            created_dt = datetime.strptime(created_str, "%m/%d/%Y %H:%M:%S")
-
-            # Normalize timestamps (fix UTC vs local issue)
-            if cutoff_timestamp:
-                cutoff_timestamp = cutoff_timestamp.replace(tzinfo=None)
-            created_dt = created_dt.replace(tzinfo=None)
-
-            # Debug print for understanding comparison
-            if cutoff_timestamp:
-                print(f"⏳ Comparing: Lead={created_dt} | LastProcessed={cutoff_timestamp}")
-
-            # Skip already processed leads
-            if cutoff_timestamp and created_dt <= cutoff_timestamp:
-                print(f"⛔ Skipped old lead: {created_str}")
-                continue
-
-            # Extract lead info
-            customer = json.loads(entity.get("CustomerInfo", "{}") or "{}")
-
-            results.append({
-                "PartitionKey": entity["PartitionKey"],
-                "RowKey": entity["RowKey"],
-                "CreatedTime": created_str,
-                "Created_dt": created_dt,
-                "Name": f"{customer.get('FirstName', '')} {customer.get('LastName', '')}",
-                "Email": customer.get("Email", ""),
-                "Company": customer.get("Company", ""),
-                "OfferDisplayName": entity.get("OfferDisplayName", ""),
-                "LeadSource": entity.get("LeadSource", "")
-            })
-
-        except Exception as e:
-            print("⚠ Lead Parse Error:", e)
-            continue
-
-    # sort oldest → newest (correct order for sending)
-    results.sort(key=lambda x: x["Created_dt"])
-    return results
