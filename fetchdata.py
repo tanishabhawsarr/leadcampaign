@@ -155,146 +155,78 @@ TABLE_NAME = os.getenv("TABLE_NAME")
 service = TableServiceClient.from_connection_string(CONN_STR)
 table_client = service.get_table_client(table_name=TABLE_NAME)
 
-from azure.data.tables import TableServiceClient
-from datetime import datetime
-import os, json
-from dotenv import load_dotenv
-
-load_dotenv()
-
-CONN_STR = os.getenv("AZURE_CONNECTION_STRING")
-TABLE_NAME = os.getenv("TABLE_NAME")
-
-service = TableServiceClient.from_connection_string(CONN_STR)
-table_client = service.get_table_client(TABLE_NAME)
+# Convert all timestamps to IST for consistent comparison
+IST = pytz.timezone("Asia/Kolkata")
 
 
-# Convert all date formats -> datetime obj
 def parse_datetime(dt_str):
     formats = [
         "%m/%d/%Y %H:%M:%S",
         "%m/%d/%Y, %I:%M:%S %p",
         "%d/%m/%Y %H:%M:%S",
-        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M:%S"
+    ]
+    for f in formats:
+        try:
+            dt = datetime.strptime(dt_str, f)
+            return IST.localize(dt).replace(tzinfo=None)  # normalized local time
+        except:
+            pass
+    return None
+
+
+import pytz
+IST = pytz.timezone("Asia/Kolkata")
+
+def normalize_datetime(dt_str):
+    formats = [
+        "%m/%d/%Y %H:%M:%S",
+        "%m/%d/%Y, %I:%M:%S %p",
+        "%d/%m/%Y %H:%M:%S",
+        "%Y-%m-%d %H:%M:%S"
     ]
 
     for f in formats:
         try:
-            dt = datetime.strptime(dt_str.strip(), f)
+            dt = datetime.strptime(dt_str, f)
+
+            # Convert parsed datetime → IST → remove timezone for clean comparison
+            dt = IST.localize(dt).astimezone(IST).replace(tzinfo=None)
             return dt
         except:
-            continue
-    return None
+            pass
 
+    return None
 
 def fetch_new_leads_since(last_timestamp):
     results = []
 
-    print(f"\n🔍 Fetching leads after: {last_timestamp}\n")
-
     for entity in table_client.list_entities():
         created_str = entity.get("CreatedTime", "").strip()
-        created_dt = parse_datetime(created_str)
+        created_dt = normalize_datetime(created_str)
 
         if not created_dt:
-            print(f"⚠ Bad timestamp skipped: {created_str}")
+            print(f"⚠️ Could not parse: {created_str}")
             continue
 
-        created_dt = created_dt.replace(tzinfo=None)  # ensure no timezone attached
+        print(f"➡️ {created_dt}  | compare with  {last_timestamp}")
 
-        # -------- FIRST RUN CONDITION --------
-        if last_timestamp is not None:
-            if created_dt <= last_timestamp:
-                continue
+        if last_timestamp and created_dt <= last_timestamp:
+            continue
 
         customer = json.loads(entity.get("CustomerInfo", "{}") or "{}")
 
         results.append({
-            "CreatedTime": created_str,
             "Created_dt": created_dt,
-            "Name": f"{customer.get('FirstName', '')} {customer.get('LastName', '')}",
+            "CreatedTime": created_str,
+            "Name": f"{customer.get('FirstName','')} {customer.get('LastName','')}".strip(),
             "Email": customer.get("Email", ""),
             "Company": customer.get("Company", ""),
-            "OfferDisplayName": entity.get("OfferDisplayName", ""),
+            "OfferDisplayName": entity.get("OfferDisplayName", "")
         })
 
-    # sort old -> new so emails go in order
     results.sort(key=lambda x: x["Created_dt"])
     return results
-
-
-# # Convert all timestamps to IST for consistent comparison
-# IST = pytz.timezone("Asia/Kolkata")
-
-
-# def parse_datetime(dt_str):
-#     formats = [
-#         "%m/%d/%Y %H:%M:%S",
-#         "%m/%d/%Y, %I:%M:%S %p",
-#         "%d/%m/%Y %H:%M:%S",
-#         "%Y-%m-%d %H:%M:%S"
-#     ]
-#     for f in formats:
-#         try:
-#             dt = datetime.strptime(dt_str, f)
-#             return IST.localize(dt).replace(tzinfo=None)  # normalized local time
-#         except:
-#             pass
-#     return None
-
-
-# import pytz
-# IST = pytz.timezone("Asia/Kolkata")
-
-# def normalize_datetime(dt_str):
-#     formats = [
-#         "%m/%d/%Y %H:%M:%S",
-#         "%m/%d/%Y, %I:%M:%S %p",
-#         "%d/%m/%Y %H:%M:%S",
-#         "%Y-%m-%d %H:%M:%S"
-#     ]
-
-#     for f in formats:
-#         try:
-#             dt = datetime.strptime(dt_str, f)
-
-#             # Convert parsed datetime → IST → remove timezone for clean comparison
-#             dt = IST.localize(dt).astimezone(IST).replace(tzinfo=None)
-#             return dt
-#         except:
-#             pass
-
-#     return None
-
-# def fetch_new_leads_since(last_timestamp):
-#     results = []
-
-#     for entity in table_client.list_entities():
-#         created_str = entity.get("CreatedTime", "").strip()
-#         created_dt = normalize_datetime(created_str)
-
-#         if not created_dt:
-#             print(f"⚠️ Could not parse: {created_str}")
-#             continue
-
-#         print(f"➡️ {created_dt}  | compare with  {last_timestamp}")
-
-#         if created_dt <= last_timestamp:
-#             continue
-
-#         customer = json.loads(entity.get("CustomerInfo", "{}") or "{}")
-
-#         results.append({
-#             "Created_dt": created_dt,
-#             "CreatedTime": created_str,
-#             "Name": f"{customer.get('FirstName','')} {customer.get('LastName','')}".strip(),
-#             "Email": customer.get("Email", ""),
-#             "Company": customer.get("Company", ""),
-#             "OfferDisplayName": entity.get("OfferDisplayName", "")
-#         })
-
-#     results.sort(key=lambda x: x["Created_dt"])
-#     return results
 
 
 # # ---------------------------
