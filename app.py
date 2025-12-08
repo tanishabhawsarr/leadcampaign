@@ -1563,6 +1563,121 @@
 
 
 
+# import os
+# import time
+# from datetime import datetime
+# from dotenv import load_dotenv
+# import requests
+# import msal
+# import traceback
+
+# from fetchdata import fetch_new_leads_since
+# from generatemail import create_mail
+# from state_manager import load_last_processed, save_last_processed
+
+# load_dotenv()
+
+# TENANT_ID = os.getenv("TENANT_ID")
+# CLIENT_ID = os.getenv("CLIENT_ID")
+# CLIENT_SECRET = os.getenv("CLIENT_SECRET")
+
+# ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")  # <-- tu apna email yahan set karega
+
+# AUTHORITY = f"https://login.microsoftonline.com/{TENANT_ID}"
+
+# SENDER_EMAIL = os.getenv("SENDER_EMAIL")
+
+# CHECK_INTERVAL_SECONDS = 60
+
+
+# def get_graph_token():
+#     app = msal.ConfidentialClientApplication(
+#         CLIENT_ID,
+#         authority=AUTHORITY,
+#         client_credential=CLIENT_SECRET
+#     )
+#     result = app.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
+#     if "access_token" not in result:
+#         raise Exception(f"Token error: {result}")
+#     return result["access_token"]
+
+
+# def send_graph_email(access_token, to_email, subject, body_html):
+#     headers = {"Authorization": f"Bearer " + access_token, "Content-Type": "application/json"}
+#     email_msg = {
+#         "message": {
+#             "subject": subject,
+#             "body": {"contentType": "HTML", "content": body_html},
+#             "toRecipients": [{"emailAddress": {"address": to_email}}],
+#         },
+#         "saveToSentItems": True,
+#     }
+
+#     url = f"https://graph.microsoft.com/v1.0/users/{SENDER_EMAIL}/sendMail"
+#     resp = requests.post(url, headers=headers, json=email_msg)
+
+#     # 👉 ADD THIS ONLY
+#     print("STATUS:", resp.status_code, "| RESPONSE:", resp.text)
+
+#     return resp.status_code in (200, 202)
+
+
+
+# def send_error_email(error_message):
+#     token = get_graph_token()
+#     subject = "🚨 Lead Automation Error Alert"
+#     body = f"""
+#     <h2>⚠ Automation Error</h2>
+#     <p><b>Time:</b> {datetime.now()}</p>
+#     <p><b>Error:</b></p>
+#     <pre>{error_message}</pre>
+#     """
+
+#     send_graph_email(token, ADMIN_EMAIL, subject, body)
+
+
+# def main_loop():
+#     print("🚀 Auto Sender Running...")
+
+#     while True:
+#         try:
+#             last_time = load_last_processed()
+#             if last_time:
+#                 cutoff = datetime.strptime(last_time, "%m/%d/%Y %H:%M:%S")
+#             else:
+#                 cutoff = datetime.now()
+
+#             leads = fetch_new_leads_since(cutoff)
+
+#             if leads:
+#                 token = get_graph_token()
+#                 leads_sorted = sorted(leads, key=lambda x: x["Created_dt"])
+
+#                 for lead in leads_sorted:
+#                     subject, body = create_mail(lead["Name"], lead["Company"], lead["OfferDisplayName"])
+#                     success = send_graph_email(token, lead["Email"], subject, body)
+
+#                     if success:
+#                         save_last_processed(lead["CreatedTime"])
+#                         print(f"📧 Sent to: {lead['Email']} | {lead['Name']}")
+#                     else:
+#                         raise Exception(f"Mail failed for {lead['Email']}")
+
+#             else:
+#                 print("⏳ No new leads...")
+
+#         except Exception as e:
+#             error_text = traceback.format_exc()
+#             print("💥 ERROR:", error_text)
+#             send_error_email(error_text)
+
+#         print(f"😴 Sleeping {CHECK_INTERVAL_SECONDS}s...\n")
+#         time.sleep(CHECK_INTERVAL_SECONDS)
+
+
+# if __name__ == "__main__":
+#     main_loop()
+
 import os
 import time
 from datetime import datetime
@@ -1580,14 +1695,11 @@ load_dotenv()
 TENANT_ID = os.getenv("TENANT_ID")
 CLIENT_ID = os.getenv("CLIENT_ID")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET")
-
-ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")  # <-- tu apna email yahan set karega
-
-AUTHORITY = f"https://login.microsoftonline.com/{TENANT_ID}"
-
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")
 SENDER_EMAIL = os.getenv("SENDER_EMAIL")
 
-CHECK_INTERVAL_SECONDS = 60
+AUTHORITY = f"https://login.microsoftonline.com/{TENANT_ID}"
+CHECK_INTERVAL_SECONDS = 30   # ⏳ Poll every 30 sec
 
 
 def get_graph_token():
@@ -1597,81 +1709,89 @@ def get_graph_token():
         client_credential=CLIENT_SECRET
     )
     result = app.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
+
     if "access_token" not in result:
         raise Exception(f"Token error: {result}")
+
     return result["access_token"]
 
 
 def send_graph_email(access_token, to_email, subject, body_html):
-    headers = {"Authorization": f"Bearer " + access_token, "Content-Type": "application/json"}
+    url = f"https://graph.microsoft.com/v1.0/users/{SENDER_EMAIL}/sendMail"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
+    }
+
     email_msg = {
         "message": {
             "subject": subject,
             "body": {"contentType": "HTML", "content": body_html},
             "toRecipients": [{"emailAddress": {"address": to_email}}],
         },
-        "saveToSentItems": True,
+        "saveToSentItems": True
     }
 
-    url = f"https://graph.microsoft.com/v1.0/users/{SENDER_EMAIL}/sendMail"
-    resp = requests.post(url, headers=headers, json=email_msg)
+    response = requests.post(url, headers=headers, json=email_msg)
 
-    # 👉 ADD THIS ONLY
-    print("STATUS:", resp.status_code, "| RESPONSE:", resp.text)
+    print(f"📨 Mail Status: {response.status_code} | {to_email}")
 
-    return resp.status_code in (200, 202)
+    return response.status_code in (200, 202)
 
 
-
-def send_error_email(error_message):
+def send_error_email(error_msg):
     token = get_graph_token()
-    subject = "🚨 Lead Automation Error Alert"
+    subject = "⚠️ Automation Error"
     body = f"""
-    <h2>⚠ Automation Error</h2>
-    <p><b>Time:</b> {datetime.now()}</p>
-    <p><b>Error:</b></p>
-    <pre>{error_message}</pre>
+    <h3>Error occurred:</h3>
+    <pre>{error_msg}</pre>
+    <p>Time: {datetime.now()}</p>
     """
-
     send_graph_email(token, ADMIN_EMAIL, subject, body)
 
 
 def main_loop():
-    print("🚀 Auto Sender Running...")
+    print("🚀 Lead Monitoring ON...")
+
+    # Load last successfully processed timestamp from file
+    last_processed_str = load_last_processed()
+
+    if last_processed_str:
+        last_processed = datetime.strptime(last_processed_str, "%m/%d/%Y %H:%M:%S")
+    else:
+        last_processed = datetime.now()
 
     while True:
         try:
-            last_time = load_last_processed()
-            if last_time:
-                cutoff = datetime.strptime(last_time, "%m/%d/%Y %H:%M:%S")
-            else:
-                cutoff = datetime.now()
+            print("🔎 Checking for new leads...")
 
-            leads = fetch_new_leads_since(cutoff)
+            new_leads = fetch_new_leads_since(last_processed)
 
-            if leads:
+            if new_leads:
                 token = get_graph_token()
-                leads_sorted = sorted(leads, key=lambda x: x["Created_dt"])
 
-                for lead in leads_sorted:
+                # Always process in proper time order from old -> new
+                sorted_leads = sorted(new_leads, key=lambda x: x["Created_dt"])
+
+                for lead in sorted_leads:
                     subject, body = create_mail(lead["Name"], lead["Company"], lead["OfferDisplayName"])
                     success = send_graph_email(token, lead["Email"], subject, body)
 
                     if success:
+                        print(f"✅ Email sent to {lead['Email']} ({lead['Name']})")
+                        last_processed = lead["Created_dt"]
                         save_last_processed(lead["CreatedTime"])
-                        print(f"📧 Sent to: {lead['Email']} | {lead['Name']}")
                     else:
-                        raise Exception(f"Mail failed for {lead['Email']}")
-
+                        print(f"⚠️ FAILED: {lead['Email']}")
             else:
-                print("⏳ No new leads...")
+                print("⏳ No leads found.")
 
         except Exception as e:
-            error_text = traceback.format_exc()
-            print("💥 ERROR:", error_text)
-            send_error_email(error_text)
+            err = traceback.format_exc()
+            print("💥 ERROR:", err)
+            send_error_email(err)
 
-        print(f"😴 Sleeping {CHECK_INTERVAL_SECONDS}s...\n")
+        print(f"😴 Waiting {CHECK_INTERVAL_SECONDS}s...\n")
         time.sleep(CHECK_INTERVAL_SECONDS)
 
 
