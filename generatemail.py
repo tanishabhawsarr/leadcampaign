@@ -51,14 +51,170 @@
 
 
 
+# import json
+# import pandas as pd
+# from difflib import get_close_matches
+# import google.generativeai as genai
+
+# # Load the Addend Analytics Apps List once
+# APPS_FILE_PATH = "Addend_Analytics_Apps_List.xlsx"
+# apps_df = pd.read_excel(APPS_FILE_PATH)
+
+# def get_app_details(offer: str):
+#     """
+#     Match the offer name to the closest 'App Name' in the Addend Analytics App List
+#     and return its Features and Description.
+#     """
+#     if not offer or apps_df.empty:
+#         return None
+
+#     app_names = apps_df["App Name"].dropna().tolist()
+#     matches = get_close_matches(offer.strip(), app_names, n=1, cutoff=0.4)
+
+#     if not matches:
+#         return None
+
+#     matched_app = matches[0]
+#     app_row = apps_df.loc[apps_df["App Name"] == matched_app].iloc[0]
+
+#     return {
+#         "matched_app": matched_app,
+#         "features": str(app_row["Features"]).strip(),
+#         "description": str(app_row["Description"]).strip()
+#     }
+
+# def create_mail(customer_name, company, offer, MODEL="gemini-2.5-flash"):
+#     """Generate a personalized professional email and subject using Gemini"""
+    
+#     # Try to fetch app details for the offer
+#     app_info = get_app_details(offer)
+#     app_description = ""
+#     app_features = ""
+
+#     if app_info:
+#         app_description = app_info["description"]
+#         app_features = app_info["features"]
+
+#     # Build dynamic part of the prompt
+#     optional_app_details = ""
+#     if app_description or app_features:
+#         optional_app_details = f"""
+#         App Description:
+#         {app_description}
+
+#         Key Features:
+#         {app_features}
+#         """
+
+#     # Construct the final AI prompt
+#     prompt = f"""
+#     Write a professional outreach email to {customer_name} from {company}, 
+#     who explored or showed interest in the {offer} on Microsoft AppSource.
+
+#     {optional_app_details}
+
+#     Follow these exact instructions:
+#     1. Start the email by thanking the customer for exploring or trying the report.
+#        Example: "Thank you so much for exploring our {offer}. We'd love to hear your experience 
+#        and if you need any assistance with it."
+
+#     2. Write the rest of the email in a friendly, conversational yet professional tone.
+#        - Briefly restate the value or benefits of the {offer}.
+#        - If app details are available, use them naturally to describe what the report helps in their {company} to achieve in 2-3 lines.
+#        - Mention 3–4 bullet points (if relevant) highlighting what the report or product enables.
+#        - Optionally, suggest a quick walkthrough or discussion for further assistance.
+
+#     3. End the email with this exact signature block:
+#        Best regards,<br>
+#        Kirti Sharma<br>
+#        +1 (470) 686-6644<br>
+#        <a href="https://addendanalytics.com/" target="_blank" style="color:#0078d4; text-decoration:none;">Addend Analytics</a><br>
+#        Microsoft Solutions Partner
+
+#       4. Include a short, friendly, and professional subject line (maximum 8 words).
+#        Use **value-driven and benefit-focused** phrasing. 
+#        The tone should sound informative and helpful, not salesy or like a follow-up.
+#        Examples of ideal subject lines:
+#          • "Task Visibility & Team Coordination with Microsoft Planner Reporting"
+#          • "Unlock the Full Potential of Your Task Management Data"
+#          • "Enhancing Project and Task Management Insights"
+#          • "Discover Actionable Insights from Your Planner Reports"
+#          • "Simplify Task Tracking with Powerful Reporting"
+
+#        - Avoid terms like “Follow-up,” “Next Steps,” or anything implying tracking or urgency.
+
+#     5. Write the email body in valid HTML format (not Markdown).
+#        - Use <p> tags for paragraphs (no multiple <br> tags).
+#        - Maintain consistent spacing between paragraphs with:
+#          <p style="line-height:1.4; margin-bottom:10px;">...</p>
+
+#     6. Do not include any links, placeholders, or markdown formatting.
+
+#     7. Return ONLY a JSON object with this structure:
+#     {{
+#         "subject": "Your engaging subject here",
+#         "body": "<html>...HTML formatted email body...</html>"
+#     }}
+
+#     8. Use compact inline CSS for spacing: 
+#    - paragraph line-height: 1.4
+#    - paragraph bottom margin: 10px
+#    - list item margin: 4px
+
+#     9. Ensure the email looks clean in Outlook and Microsoft Teams.
+
+#     """
+
+#     # Generate response from Gemini
+#     model = genai.GenerativeModel(MODEL)
+#     response = model.generate_content(prompt)
+
+#     # Safely extract text content
+#     text = getattr(response, "text", None)
+#     if not text:
+#         return f"Regarding your interest in {offer}", "Hello, thank you for your interest."
+
+#     text = text.strip()
+#     if text.startswith("```"):
+#         text = text.split("```")[-2]
+#     text = text.replace("json", "").strip()
+
+#     try:
+#         data = json.loads(text)
+#         subject = data.get("subject", f"Regarding your interest in {offer}")
+#         body = data.get("body", "Hello, thank you for your interest.")
+#     except Exception:
+#         subject = f"Regarding your interest in {offer}"
+#         body = text or "Hello, thank you for your interest."
+
+#     return subject, body
+
+
+
 import json
+import os
 import pandas as pd
 from difflib import get_close_matches
-import google.generativeai as genai
+from openai import AzureOpenAI
 
+# -------------------------------
+# Azure OpenAI Client (AI Foundry)
+# -------------------------------
+client = AzureOpenAI(
+    api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+    azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
+    api_version="2024-02-15-preview"
+)
+
+# Deployment name (same as model deployment in Azure OpenAI)
+MODEL = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o")
+
+# -------------------------------
 # Load the Addend Analytics Apps List once
+# -------------------------------
 APPS_FILE_PATH = "Addend_Analytics_Apps_List.xlsx"
 apps_df = pd.read_excel(APPS_FILE_PATH)
+
 
 def get_app_details(offer: str):
     """
@@ -83,10 +239,11 @@ def get_app_details(offer: str):
         "description": str(app_row["Description"]).strip()
     }
 
-def create_mail(customer_name, company, offer, MODEL="gemini-2.5-flash"):
-    """Generate a personalized professional email and subject using Gemini"""
-    
-    # Try to fetch app details for the offer
+
+def create_mail(customer_name, company, offer):
+    """Generate a personalized professional email and subject using Azure OpenAI"""
+
+    # Fetch app details
     app_info = get_app_details(offer)
     app_description = ""
     app_features = ""
@@ -95,7 +252,6 @@ def create_mail(customer_name, company, offer, MODEL="gemini-2.5-flash"):
         app_description = app_info["description"]
         app_features = app_info["features"]
 
-    # Build dynamic part of the prompt
     optional_app_details = ""
     if app_description or app_features:
         optional_app_details = f"""
@@ -106,7 +262,7 @@ def create_mail(customer_name, company, offer, MODEL="gemini-2.5-flash"):
         {app_features}
         """
 
-    # Construct the final AI prompt
+    # Prompt (UNCHANGED)
     prompt = f"""
     Write a professional outreach email to {customer_name} from {company}, 
     who explored or showed interest in the {offer} on Microsoft AppSource.
@@ -115,14 +271,12 @@ def create_mail(customer_name, company, offer, MODEL="gemini-2.5-flash"):
 
     Follow these exact instructions:
     1. Start the email by thanking the customer for exploring or trying the report.
-       Example: "Thank you so much for exploring our {offer}. We'd love to hear your experience 
-       and if you need any assistance with it."
 
     2. Write the rest of the email in a friendly, conversational yet professional tone.
        - Briefly restate the value or benefits of the {offer}.
-       - If app details are available, use them naturally to describe what the report helps in their {company} to achieve in 2-3 lines.
-       - Mention 3–4 bullet points (if relevant) highlighting what the report or product enables.
-       - Optionally, suggest a quick walkthrough or discussion for further assistance.
+       - Use app details naturally if available.
+       - Mention 3–4 bullet points (if relevant).
+       - Optionally suggest a walkthrough.
 
     3. End the email with this exact signature block:
        Best regards,<br>
@@ -131,52 +285,36 @@ def create_mail(customer_name, company, offer, MODEL="gemini-2.5-flash"):
        <a href="https://addendanalytics.com/" target="_blank" style="color:#0078d4; text-decoration:none;">Addend Analytics</a><br>
        Microsoft Solutions Partner
 
-      4. Include a short, friendly, and professional subject line (maximum 8 words).
-       Use **value-driven and benefit-focused** phrasing. 
-       The tone should sound informative and helpful, not salesy or like a follow-up.
-       Examples of ideal subject lines:
-         • "Task Visibility & Team Coordination with Microsoft Planner Reporting"
-         • "Unlock the Full Potential of Your Task Management Data"
-         • "Enhancing Project and Task Management Insights"
-         • "Discover Actionable Insights from Your Planner Reports"
-         • "Simplify Task Tracking with Powerful Reporting"
+    4. Include a short, professional subject line (max 8 words).
 
-       - Avoid terms like “Follow-up,” “Next Steps,” or anything implying tracking or urgency.
+    5. Write email body in valid HTML only.
 
-    5. Write the email body in valid HTML format (not Markdown).
-       - Use <p> tags for paragraphs (no multiple <br> tags).
-       - Maintain consistent spacing between paragraphs with:
-         <p style="line-height:1.4; margin-bottom:10px;">...</p>
+    6. Do not include markdown or extra links.
 
-    6. Do not include any links, placeholders, or markdown formatting.
-
-    7. Return ONLY a JSON object with this structure:
+    7. Return ONLY JSON:
     {{
-        "subject": "Your engaging subject here",
-        "body": "<html>...HTML formatted email body...</html>"
+        "subject": "Subject here",
+        "body": "<html>HTML body</html>"
     }}
-
-    8. Use compact inline CSS for spacing: 
-   - paragraph line-height: 1.4
-   - paragraph bottom margin: 10px
-   - list item margin: 4px
-
-    9. Ensure the email looks clean in Outlook and Microsoft Teams.
-
     """
 
-    # Generate response from Gemini
-    model = genai.GenerativeModel(MODEL)
-    response = model.generate_content(prompt)
+    # -------------------------------
+    # Azure OpenAI call
+    # -------------------------------
+    response = client.chat.completions.create(
+        model=MODEL,
+        temperature=0.6,
+        messages=[
+            {"role": "system", "content": "You are a professional B2B email campaign assistant."},
+            {"role": "user", "content": prompt}
+        ]
+    )
 
-    # Safely extract text content
-    text = getattr(response, "text", None)
-    if not text:
-        return f"Regarding your interest in {offer}", "Hello, thank you for your interest."
+    text = response.choices[0].message.content.strip()
 
-    text = text.strip()
+    # Clean fenced JSON if present
     if text.startswith("```"):
-        text = text.split("```")[-2]
+        text = text.split("```")[1]
     text = text.replace("json", "").strip()
 
     try:
