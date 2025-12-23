@@ -270,6 +270,9 @@ def create_mail(customer_name, company, offer):
     {optional_app_details}
 
     Follow these exact instructions:
+    0. Start the email greeting with either **"Hi {customer_name}," or "Hello {customer_name},"**
+   - Do NOT use "Dear" anywhere in the email.
+
     1. Start the email by thanking the customer for exploring or trying the report.
 
     2. Write the rest of the email in a friendly, conversational yet professional tone.
