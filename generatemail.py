@@ -203,13 +203,13 @@ from openai import AzureOpenAI
 client = AzureOpenAI(
     api_key=os.getenv("AZURE_OPENAI_API_KEY"),
     azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
-    api_version="2024-02-15-preview"
+    api_version="2024-12-01-preview"
 )
 
 # Deployment name (same as model deployment in Azure OpenAI)
-MODEL = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o")
+MODEL = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o-mini")
 
-# -------------------------------
+# ------------------------------- 
 # Load the Addend Analytics Apps List once
 # -------------------------------
 APPS_FILE_PATH = "Addend_Analytics_Apps_List.xlsx"
